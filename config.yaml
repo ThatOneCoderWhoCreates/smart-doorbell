@@ -1,0 +1,9 @@
+camera:
+  command: libcamera-still
+  resolution: "1280x720"
+
+storage:
+  path: "storage/local"
+
+logging:
+  file: "logs/doorbell.log"
