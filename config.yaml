@@ -1,0 +1,11 @@
+camera:
+  command: libcamera-still
+  index: 0
+  fps: 10
+  buffer_seconds: 15
+
+storage:
+  path: "storage/local"
+
+logging:
+  file: "logs/doorbell.log"
