@@ -1,5 +1,20 @@
+<<<<<<< HEAD
 venv/
 __pycache__/
 *.pyc
 storage/
 logs/
+=======
+# Python
+__pycache__/
+*.pyc
+venv/
+
+# Logs & recordings
+logs/
+storage/
+
+# OS
+.DS_Store
+Thumbs.db
+>>>>>>> bae2011394891f3509e14bf25e50836c364789e0

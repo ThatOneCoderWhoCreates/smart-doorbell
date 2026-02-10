@@ -30,4 +30,8 @@ def record_event(pre_buffer, cap, duration=10, fps=10):
             writer.write(frame)
 
     writer.release()
+<<<<<<< HEAD
     return filename
+=======
+    return filename
+>>>>>>> bae2011394891f3509e14bf25e50836c364789e0

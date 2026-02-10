@@ -26,4 +26,8 @@ class LiveCameraBuffer:
         return list(self.buffer)
 
     def release(self):
+<<<<<<< HEAD
         self.cap.release()
+=======
+        self.cap.release()
+>>>>>>> bae2011394891f3509e14bf25e50836c364789e0
