@@ -1,106 +1,96 @@
-import cv2
-import time
-import threading
-import os
-from collections import deque
-from datetime import datetime
 import tkinter as tk
-from PIL import Image, ImageTk
+import threading
+import main
 
-# -------- SETTINGS --------
-BUFFER_SECONDS = 10
-FPS = 10
-POST_EVENT_SECONDS = 10
-VIDEO_FOLDER = "storage/local"
+class SmartDoorbellUI:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Smart Doorbell System")
+        self.root.geometry("420x320")
 
-os.makedirs(VIDEO_FOLDER, exist_ok=True)
+        self.system_thread = None
+        self.status = tk.StringVar(value="Status: Idle")
 
-# -------- CAMERA --------
-cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
-cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+        # Title
+        tk.Label(
+            root,
+            text="SMART DOORBELL",
+            font=("Arial", 16, "bold")
+        ).pack(pady=10)
 
-buffer = deque(maxlen=BUFFER_SECONDS * FPS)
-recording = False
+        # Status
+        tk.Label(
+            root,
+            textvariable=self.status,
+            font=("Arial", 12)
+        ).pack(pady=10)
 
-# -------- GUI --------
-root = tk.Tk()
-root.title("Smart Doorbell")
+        # Start Button
+        self.start_btn = tk.Button(
+            root,
+            text="Start Camera System",
+            width=25,
+            command=self.start_system
+        )
+        self.start_btn.pack(pady=5)
 
-video_label = tk.Label(root)
-video_label.pack()
+        # Trigger Button
+        self.trigger_btn = tk.Button(
+            root,
+            text="Simulate Motion Event",
+            width=25,
+            command=self.trigger_event,
+            state=tk.DISABLED
+        )
+        self.trigger_btn.pack(pady=5)
 
-status_label = tk.Label(root, text="Status: Idle", font=("Arial", 12))
-status_label.pack()
+        # Stop Button
+        self.stop_btn = tk.Button(
+            root,
+            text="Stop System",
+            width=25,
+            command=self.stop_system,
+            state=tk.DISABLED
+        )
+        self.stop_btn.pack(pady=5)
 
-# -------- FUNCTIONS --------
+        # Exit
+        tk.Button(
+            root,
+            text="Exit",
+            width=25,
+            command=self.exit_app
+        ).pack(pady=20)
 
-def add_timestamp(frame):
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    cv2.putText(frame, timestamp, (10, 460),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.6,
-                (0, 255, 0), 2)
-    return frame
+    def start_system(self):
+        self.status.set("Status: Running")
+        self.start_btn.config(state=tk.DISABLED)
+        self.stop_btn.config(state=tk.NORMAL)
+        self.trigger_btn.config(state=tk.NORMAL)
 
+        self.system_thread = threading.Thread(
+            target=main.start_system,
+            daemon=True
+        )
+        self.system_thread.start()
 
-def update_frame():
-    ret, frame = cap.read()
-    if ret:
-        frame = add_timestamp(frame)
-        buffer.append(frame.copy())
+    def trigger_event(self):
+        main.request_event()
+        self.status.set("Status: Motion Event Triggered")
 
-        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        img = Image.fromarray(rgb)
-        imgtk = ImageTk.PhotoImage(image=img)
+    def stop_system(self):
+        main.stop_system()
+        self.status.set("Status: Stopped")
+        self.start_btn.config(state=tk.NORMAL)
+        self.stop_btn.config(state=tk.DISABLED)
+        self.trigger_btn.config(state=tk.DISABLED)
 
-        video_label.imgtk = imgtk
-        video_label.configure(image=imgtk)
-
-    root.after(int(1000/FPS), update_frame)
-
-
-def record_event():
-    global recording
-    if recording:
-        return
-
-    recording = True
-    status_label.config(text="Status: Recording Event")
-
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    filename = f"{VIDEO_FOLDER}/event_{timestamp}.avi"
-
-    height, width, _ = buffer[0].shape
-    writer = cv2.VideoWriter(
-        filename,
-        cv2.VideoWriter_fourcc(*"XVID"),
-        FPS,
-        (width, height)
-    )
-
-    # Write pre-event frames
-    for frame in buffer:
-        writer.write(frame)
-
-    # Write post-event frames
-    start = time.time()
-    while time.time() - start < POST_EVENT_SECONDS:
-        ret, frame = cap.read()
-        if ret:
-            frame = add_timestamp(frame)
-            writer.write(frame)
-
-    writer.release()
-    status_label.config(text=f"Saved: {filename}")
-    recording = False
+    def exit_app(self):
+        main.stop_system()
+        self.root.destroy()
 
 
-trigger_button = tk.Button(root, text="Trigger Event", command=lambda: threading.Thread(target=record_event).start())
-trigger_button.pack(pady=10)
-
-# -------- START --------
-update_frame()
-root.mainloop()
-
-cap.release()
-cv2.destroyAllWindows()
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = SmartDoorbellUI(root)
+    root.mainloop()
