@@ -15,8 +15,8 @@ def add_timestamp(frame):
         cv2.LINE_AA
     )
 
-<<<<<<< HEAD
+#<<<<<<< HEAD
     return frame
-=======
+#=======
     return frame
->>>>>>> bae2011394891f3509e14bf25e50836c364789e0
+#>>>>>>> bae2011394891f3509e14bf25e50836c364789e0

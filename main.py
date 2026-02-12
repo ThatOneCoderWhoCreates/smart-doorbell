@@ -1,118 +1,83 @@
+import threading
+import time
+import yaml
+
 from camera.live_buffer import LiveCameraBuffer
 from camera.record_event import record_event
 from utils.logger import log
-import time
-import threading
 
-<<<<<<< HEAD
-# =====================
-# SHARED CONTROL FLAGS
-# =====================
-event_requested = False
+# Load configuration
+with open("config.yaml") as f:
+    config = yaml.safe_load(f)
+
+buffer_seconds = config["camera"]["buffer_seconds"]
+fps = config["camera"]["fps"]
+event_duration = config["camera"]["event_duration"]
+
+# Global objects
+live_buffer = None
 system_running = False
 
 
-def request_event():
-    global event_requested
-    event_requested = True
-
-
 def start_system():
-    global system_running, event_requested
+    global live_buffer, system_running
+
+    if system_running:
+        return
+
+    print("Starting Smart Doorbell system...")
+    log("System started")
+
+    live_buffer = LiveCameraBuffer(buffer_seconds=buffer_seconds, fps=fps)
     system_running = True
-    event_requested = False
 
-    log("Smart Doorbell System Started")
+    # Start background thread
+    threading.Thread(target=run_camera_loop, daemon=True).start()
+
+
+def run_camera_loop():
+    global system_running
+
     print("Live camera feed running (continuous)")
-    print("Maintaining 10–15s rolling buffer\n")
+    print(f"Maintaining {buffer_seconds}s rolling buffer")
 
-    camera = LiveCameraBuffer(buffer_seconds=15, fps=10)
+    while system_running:
+        ret, frame = live_buffer.read_frame()
+        if not ret:
+            print("Camera frame read failed")
+            break
+        time.sleep(1 / fps)
 
-    try:
-        while system_running:
-            # Always read frames
-            camera.read_frame()
-            time.sleep(0.05)
 
-            if event_requested:
-                event_requested = False
-                log("Motion event detected")
+def trigger_motion():
+    global live_buffer
 
-                print("Saving pre-event + live video...")
-                pre_frames = camera.get_buffer_frames()
+    if not live_buffer:
+        print("System not started")
+        return
 
-                video = record_event(
-                    pre_frames,
-                    camera.cap,
-                    duration=10,
-                    fps=10
-                )
+    print("Motion event detected")
+    print("Saving pre-event + live video...")
+    log("Motion detected")
 
-                log(f"Event video saved: {video}")
-                print(f"Saved video: {video}\n")
+    filename = record_event(
+        live_buffer.get_buffer_frames(),
+        live_buffer.cap,
+        duration=event_duration,
+        fps=fps
+    )
 
-    except Exception as e:
-        log(f"System error: {e}")
-
-    finally:
-        camera.release()
-        log("System stopped safely")
-        print("Camera released")
+    print(f"Saved video: {filename}")
+    log(f"Event saved: {filename}")
 
 
 def stop_system():
-    global system_running
+    global system_running, live_buffer
+
     system_running = False
 
+    if live_buffer:
+        live_buffer.release()
 
-# CLI fallback (still works)
-if __name__ == "__main__":
-    start_system()
-=======
-# Shared trigger flag
-event_requested = False
-
-def wait_for_trigger():
-    global event_requested
-    while True:
-        input(">> Press ENTER to simulate motion\n")
-        event_requested = True
-
-print("Smart Doorbell System Started")
-print("Live camera feed running (continuous)")
-print("Maintaining 10–15s rolling buffer\n")
-
-# Start trigger listener in a separate thread
-trigger_thread = threading.Thread(target=wait_for_trigger, daemon=True)
-trigger_thread.start()
-
-camera = LiveCameraBuffer(buffer_seconds=15, fps=10)
-
-try:
-    while True:
-        # ALWAYS read frames (this is the key fix)
-        camera.read_frame()
-        time.sleep(0.05)  # control CPU usage
-
-        if event_requested:
-            event_requested = False
-            log("Motion event detected")
-
-            print("Saving pre-event + live video...")
-            pre_frames = camera.get_buffer_frames()
-
-            video = record_event(
-                pre_frames,
-                camera.cap,
-                duration=10,
-                fps=10
-            )
-
-            log(f"Event video saved: {video}")
-            print(f"Saved video: {video}\n")
-
-except KeyboardInterrupt:
-    log("System shutdown by user")
-    camera.release()
-    print("\nSystem stopped safely")
->>>>>>> bae2011394891f3509e14bf25e50836c364789e0
+    print("System stopped")
+    log("System stopped")
