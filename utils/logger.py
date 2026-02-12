@@ -18,7 +18,3 @@ logging.basicConfig(
 
 def log(msg):
     logging.info(msg)
-<<<<<<< HEAD
-    print(msg)
-=======
->>>>>>> bae2011394891f3509e14bf25e50836c364789e0

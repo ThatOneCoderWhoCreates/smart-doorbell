@@ -64,8 +64,4 @@ def capture_with_libcamera(filename):
 
     except Exception as e:
         log(f"Pi camera error: {e}")
-<<<<<<< HEAD
         return None
-=======
-        return None
->>>>>>> bae2011394891f3509e14bf25e50836c364789e0

@@ -1,118 +1,106 @@
-from camera.live_buffer import LiveCameraBuffer
-from camera.record_event import record_event
-from utils.logger import log
+import cv2
 import time
 import threading
+import os
+from collections import deque
+from datetime import datetime
+import tkinter as tk
+from PIL import Image, ImageTk
 
-<<<<<<< HEAD
-# =====================
-# SHARED CONTROL FLAGS
-# =====================
-event_requested = False
-system_running = False
+# -------- SETTINGS --------
+BUFFER_SECONDS = 10
+FPS = 10
+POST_EVENT_SECONDS = 10
+VIDEO_FOLDER = "storage/local"
 
+os.makedirs(VIDEO_FOLDER, exist_ok=True)
 
-def request_event():
-    global event_requested
-    event_requested = True
+# -------- CAMERA --------
+cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
+buffer = deque(maxlen=BUFFER_SECONDS * FPS)
+recording = False
 
-def start_system():
-    global system_running, event_requested
-    system_running = True
-    event_requested = False
+# -------- GUI --------
+root = tk.Tk()
+root.title("Smart Doorbell")
 
-    log("Smart Doorbell System Started")
-    print("Live camera feed running (continuous)")
-    print("Maintaining 10–15s rolling buffer\n")
+video_label = tk.Label(root)
+video_label.pack()
 
-    camera = LiveCameraBuffer(buffer_seconds=15, fps=10)
+status_label = tk.Label(root, text="Status: Idle", font=("Arial", 12))
+status_label.pack()
 
-    try:
-        while system_running:
-            # Always read frames
-            camera.read_frame()
-            time.sleep(0.05)
+# -------- FUNCTIONS --------
 
-            if event_requested:
-                event_requested = False
-                log("Motion event detected")
-
-                print("Saving pre-event + live video...")
-                pre_frames = camera.get_buffer_frames()
-
-                video = record_event(
-                    pre_frames,
-                    camera.cap,
-                    duration=10,
-                    fps=10
-                )
-
-                log(f"Event video saved: {video}")
-                print(f"Saved video: {video}\n")
-
-    except Exception as e:
-        log(f"System error: {e}")
-
-    finally:
-        camera.release()
-        log("System stopped safely")
-        print("Camera released")
+def add_timestamp(frame):
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    cv2.putText(frame, timestamp, (10, 460),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.6,
+                (0, 255, 0), 2)
+    return frame
 
 
-def stop_system():
-    global system_running
-    system_running = False
+def update_frame():
+    ret, frame = cap.read()
+    if ret:
+        frame = add_timestamp(frame)
+        buffer.append(frame.copy())
+
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        img = Image.fromarray(rgb)
+        imgtk = ImageTk.PhotoImage(image=img)
+
+        video_label.imgtk = imgtk
+        video_label.configure(image=imgtk)
+
+    root.after(int(1000/FPS), update_frame)
 
 
-# CLI fallback (still works)
-if __name__ == "__main__":
-    start_system()
-=======
-# Shared trigger flag
-event_requested = False
+def record_event():
+    global recording
+    if recording:
+        return
 
-def wait_for_trigger():
-    global event_requested
-    while True:
-        input(">> Press ENTER to simulate motion\n")
-        event_requested = True
+    recording = True
+    status_label.config(text="Status: Recording Event")
 
-print("Smart Doorbell System Started")
-print("Live camera feed running (continuous)")
-print("Maintaining 10–15s rolling buffer\n")
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    filename = f"{VIDEO_FOLDER}/event_{timestamp}.avi"
 
-# Start trigger listener in a separate thread
-trigger_thread = threading.Thread(target=wait_for_trigger, daemon=True)
-trigger_thread.start()
+    height, width, _ = buffer[0].shape
+    writer = cv2.VideoWriter(
+        filename,
+        cv2.VideoWriter_fourcc(*"XVID"),
+        FPS,
+        (width, height)
+    )
 
-camera = LiveCameraBuffer(buffer_seconds=15, fps=10)
+    # Write pre-event frames
+    for frame in buffer:
+        writer.write(frame)
 
-try:
-    while True:
-        # ALWAYS read frames (this is the key fix)
-        camera.read_frame()
-        time.sleep(0.05)  # control CPU usage
+    # Write post-event frames
+    start = time.time()
+    while time.time() - start < POST_EVENT_SECONDS:
+        ret, frame = cap.read()
+        if ret:
+            frame = add_timestamp(frame)
+            writer.write(frame)
 
-        if event_requested:
-            event_requested = False
-            log("Motion event detected")
+    writer.release()
+    status_label.config(text=f"Saved: {filename}")
+    recording = False
 
-            print("Saving pre-event + live video...")
-            pre_frames = camera.get_buffer_frames()
 
-            video = record_event(
-                pre_frames,
-                camera.cap,
-                duration=10,
-                fps=10
-            )
+trigger_button = tk.Button(root, text="Trigger Event", command=lambda: threading.Thread(target=record_event).start())
+trigger_button.pack(pady=10)
 
-            log(f"Event video saved: {video}")
-            print(f"Saved video: {video}\n")
+# -------- START --------
+update_frame()
+root.mainloop()
 
-except KeyboardInterrupt:
-    log("System shutdown by user")
-    camera.release()
-    print("\nSystem stopped safely")
->>>>>>> bae2011394891f3509e14bf25e50836c364789e0
+cap.release()
+cv2.destroyAllWindows()
