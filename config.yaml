@@ -1,19 +1,11 @@
 camera:
   command: libcamera-still
-<<<<<<< HEAD
   index: 0
   fps: 10
   buffer_seconds: 15
-=======
-  resolution: "1280x720"
->>>>>>> bae2011394891f3509e14bf25e50836c364789e0
 
 storage:
   path: "storage/local"
 
 logging:
-<<<<<<< HEAD
   file: "logs/doorbell.log"
-=======
-  file: "logs/doorbell.log"
->>>>>>> bae2011394891f3509e14bf25e50836c364789e0

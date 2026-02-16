@@ -1,96 +1,128 @@
-import tkinter as tk
+import os
+os.environ["OPENCV_AVFOUNDATION_SKIP_AUTH"] = "1"
+
+import cv2
+import time
 import threading
-import main
+import shutil
+from collections import deque
+from datetime import datetime
+from detector import detect_person
 
-class SmartDoorbellUI:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Smart Doorbell System")
-        self.root.geometry("420x320")
+BUFFER_SECONDS = 10
+FPS = 10
+POST_EVENT_SECONDS = 10
+VIDEO_FOLDER = "storage/local"
 
-        self.system_thread = None
-        self.status = tk.StringVar(value="Status: Idle")
+os.makedirs(VIDEO_FOLDER, exist_ok=True)
 
-        # Title
-        tk.Label(
-            root,
-            text="SMART DOORBELL",
-            font=("Arial", 16, "bold")
-        ).pack(pady=10)
-
-        # Status
-        tk.Label(
-            root,
-            textvariable=self.status,
-            font=("Arial", 12)
-        ).pack(pady=10)
-
-        # Start Button
-        self.start_btn = tk.Button(
-            root,
-            text="Start Camera System",
-            width=25,
-            command=self.start_system
-        )
-        self.start_btn.pack(pady=5)
-
-        # Trigger Button
-        self.trigger_btn = tk.Button(
-            root,
-            text="Simulate Motion Event",
-            width=25,
-            command=self.trigger_event,
-            state=tk.DISABLED
-        )
-        self.trigger_btn.pack(pady=5)
-
-        # Stop Button
-        self.stop_btn = tk.Button(
-            root,
-            text="Stop System",
-            width=25,
-            command=self.stop_system,
-            state=tk.DISABLED
-        )
-        self.stop_btn.pack(pady=5)
-
-        # Exit
-        tk.Button(
-            root,
-            text="Exit",
-            width=25,
-            command=self.exit_app
-        ).pack(pady=20)
-
-    def start_system(self):
-        self.status.set("Status: Running")
-        self.start_btn.config(state=tk.DISABLED)
-        self.stop_btn.config(state=tk.NORMAL)
-        self.trigger_btn.config(state=tk.NORMAL)
-
-        self.system_thread = threading.Thread(
-            target=main.start_system,
-            daemon=True
-        )
-        self.system_thread.start()
-
-    def trigger_event(self):
-        main.request_event()
-        self.status.set("Status: Motion Event Triggered")
-
-    def stop_system(self):
-        main.stop_system()
-        self.status.set("Status: Stopped")
-        self.start_btn.config(state=tk.NORMAL)
-        self.stop_btn.config(state=tk.DISABLED)
-        self.trigger_btn.config(state=tk.DISABLED)
-
-    def exit_app(self):
-        main.stop_system()
-        self.root.destroy()
+cap = None
+buffer = deque(maxlen=BUFFER_SECONDS * FPS)
+running = False
+recording = False
+latest_frame = None
+lock = threading.Lock()
 
 
-if __name__ == "__main__":
-    root = tk.Tk()
-    app = SmartDoorbellUI(root)
-    root.mainloop()
+def add_timestamp(frame):
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    cv2.putText(frame, timestamp, (10, frame.shape[0] - 10),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.6,
+                (0, 255, 0), 2)
+    return frame
+
+
+def start_system():
+    global cap, running, latest_frame
+
+    if running:
+        return
+
+    cap = cv2.VideoCapture(0, cv2.CAP_AVFOUNDATION)
+
+    if not cap.isOpened():
+        print("Camera failed to open")
+        return
+
+    running = True
+
+    while running:
+        ret, frame = cap.read()
+        if not ret:
+            continue
+
+        frame = add_timestamp(frame)
+
+        latest_frame = frame.copy()
+
+        with lock:
+            buffer.append(frame.copy())
+
+        if not recording:
+            if detect_person(frame):
+                print("Person detected!")
+                handle_event()
+
+        time.sleep(1 / FPS)
+
+
+def stop_system():
+    global running, cap
+    running = False
+
+    if cap:
+        cap.release()
+        cap = None
+
+
+def get_latest_frame():
+    return latest_frame
+
+
+def handle_event():
+    global recording
+
+    if recording:
+        return
+
+    if len(buffer) < FPS:
+        return
+
+    recording = True
+
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    temp_folder = f"{VIDEO_FOLDER}/temp_{timestamp}"
+    os.makedirs(temp_folder, exist_ok=True)
+
+    print("Recording event...")
+
+    frame_index = 0
+
+    # Save pre-event frames
+    with lock:
+        for frame in buffer:
+            cv2.imwrite(f"{temp_folder}/frame_{frame_index:04d}.jpg", frame)
+            frame_index += 1
+
+    # Save post-event frames
+    start = time.time()
+    while time.time() - start < POST_EVENT_SECONDS:
+        ret, frame = cap.read()
+        if ret:
+            frame = add_timestamp(frame)
+            cv2.imwrite(f"{temp_folder}/frame_{frame_index:04d}.jpg", frame)
+            frame_index += 1
+
+    output_file = f"{VIDEO_FOLDER}/event_{timestamp}.mp4"
+
+    os.system(
+        f"ffmpeg -y -framerate {FPS} "
+        f"-i {temp_folder}/frame_%04d.jpg "
+        f"-c:v libx264 -pix_fmt yuv420p {output_file}"
+    )
+
+    shutil.rmtree(temp_folder)
+
+    print(f"Saved: {output_file}")
+
+    recording = False
