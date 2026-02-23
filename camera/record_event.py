@@ -1,33 +1,43 @@
 import cv2
-import time
+import os
 from datetime import datetime
-from utils.timestamp import add_timestamp
 
-def record_event(pre_buffer, cap, duration=10, fps=10):
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    filename = f"storage/local/event_{timestamp}.avi"
 
-    height, width, _ = pre_buffer[0].shape
+def record_event(pre_frames, cap, duration=10, fps=10):
+    if not pre_frames:
+        print("No pre-buffer frames available")
+        return None
 
-    writer = cv2.VideoWriter(
-        filename,
-        cv2.VideoWriter_fourcc(*"XVID"),
-        fps,
-        (width, height)
+    project_root = os.getcwd()
+    save_dir = os.path.join(project_root, "storage", "local")
+    os.makedirs(save_dir, exist_ok=True)
+
+    filename = os.path.join(
+        save_dir,
+        f"event_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.avi"
     )
 
-    # Write PRE-event frames
-    for frame in pre_buffer:
-        frame = add_timestamp(frame)
-        writer.write(frame)
+    height, width, _ = pre_frames[0].shape
 
-    # Write LIVE frames
-    start = time.time()
-    while time.time() - start < duration:
+    fourcc = cv2.VideoWriter_fourcc(*"MJPG")  # Windows-safe codec
+    out = cv2.VideoWriter(filename, fourcc, fps, (width, height))
+
+    if not out.isOpened():
+        print("VideoWriter failed to open")
+        return None
+
+    # Write pre-event frames
+    for frame in pre_frames:
+        out.write(frame)
+
+    # Write post-event frames
+    frame_count = duration * fps
+    for _ in range(frame_count):
         ret, frame = cap.read()
-        if ret:
-            frame = add_timestamp(frame)
-            writer.write(frame)
+        if not ret:
+            break
+        out.write(frame)
 
-    writer.release()
+    out.release()
+
     return filename

@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart AI Doorbell</title>
+    <link rel="stylesheet" href="/static/style.css">
+
+    <!-- PWA Requirements -->
+    <link rel="manifest" href="/static/manifest.json">
+    <meta name="theme-color" content="#121826">
+    <link rel="apple-touch-icon" href="/static/favicon.ico">
+</head>
+
+<body>
+
+    <div class="dashboard">
+
+        <header>
+            <h1>🔔 Smart AI Doorbell</h1>
+            <div id="systemStatus" class="status offline">Offline</div>
+        </header>
+
+        <div class="main-content">
+
+            <div class="video-card">
+                <h2>Live Camera</h2>
+                <img src="/video_feed" class="video-feed">
+                <div class="info-panel desktop-info">
+                    <p><strong>Threat Level:</strong> <span id="threatLevel">Normal</span></p>
+                    <p><strong>Last Event:</strong> <span id="lastEvent">None</span></p>
+                </div>
+
+                <!-- Shared Controls (Visible on Both Mobile & PC) -->
+                <div class="shared-controls"
+                    style="display: flex; gap: 15px; margin-top: 20px; flex-wrap: wrap; justify-content: center; align-items: center; background: rgba(255, 255, 255, 0.05); padding: 15px; border-radius: 8px;">
+                    <div style="text-align: center; flex: 1; min-width: 200px;">
+                        <button id="micButton" class="mic-btn" style="margin: 0; width: 100%;"
+                            onmousedown="startAudio()" onmouseup="stopAudio()" ontouchstart="startAudio()"
+                            ontouchend="stopAudio()">🎙️ Hold to Talk</button>
+                        <p id="audioStatus" style="font-size: 0.8em; color: #aaa; margin-top: 5px; margin-bottom: 0;">
+                            Connecting...</p>
+                    </div>
+                    <div style="flex: 1; min-width: 200px;">
+                        <button onclick="simulatePIR()"
+                            style="background-color: #ffc107; color: black; border: none; padding: 15px; border-radius: 50px; cursor: pointer; width: 100%; font-size: 1.1rem; margin: 0; font-weight: bold;">🚶‍♂️
+                            Simulate Motion</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="control-card">
+                <h2>Controls</h2>
+
+                <!-- NEW: Edge Architecture Features -->
+                <div
+                    style="background: rgba(255, 255, 255, 0.05); padding: 20px; border-radius: 12px; margin-bottom: 20px;">
+                    <h3 style="margin-top: 0; color: white;">Access Control</h3>
+
+                    <div class="lock-visual-container">
+                        <div id="visualLock" class="lock-icon locked">🔒</div>
+                    </div>
+
+                    <div style="display: flex; gap: 10px; margin-top: 15px;">
+                        <button class="control-btn" onclick="lockDoor()" style="flex: 1; background: #e74c3c;">🔒 Lock
+                            Door</button>
+                        <button class="control-btn" onclick="unlockDoor()" style="flex: 1; background: #27ae60;">🔓
+                            Unlock Door</button>
+                    </div>
+                </div>
+
+                <hr style="margin: 20px 0; border: 1px solid #ccc;">
+
+                <button onclick="startSystem()">Start System</button>
+                <button onclick="stopSystem()">Stop System</button>
+                <button onclick="triggerEvent()">Manual Record Override</button>
+            </div>
+
+            <div class="recording-card">
+                <h2>Recording History</h2>
+                <ul id="recordingList" style="list-style-type: none; padding: 0;">
+                    <li>Loading...</li>
+                </ul>
+            </div>
+
+        </div>
+
+    </div>
+
+    <script src="/static/app.js"></script>
+
+</body>
+
+</html>

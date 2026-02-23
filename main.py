@@ -1,127 +1,131 @@
+from camera.live_buffer import LiveCameraBuffer
+from camera.record_event import record_event
+from ai.human_detector import HumanDetector
+from utils.logger import log
+from utils.hardware import HardwareInterface
 import cv2
 import time
-import os
 import threading
-from datetime import datetime
-from detector import detect_person
-
-VIDEO_FOLDER = "storage/local"
-os.makedirs(VIDEO_FOLDER, exist_ok=True)
-
-FPS = 10
-STOP_DELAY = 5   # seconds to wait before stopping recording
-
-cap = None
-running = False
-recording = False
-video_writer = None
-last_person_time = None
-latest_frame = None
-lock = threading.Lock()
 
 
-def start_system():
-    global cap, running
+class DoorbellSystem:
+    def __init__(self, show_window=False):
+        self.event_requested = False
+        self.running = False
+        self.show_window = show_window
+        self.idle = True  # Starts idle, waits for motion
+        
+        self.push_callback = None
+        self.push_sent_for_event = False
 
-    if running:
-        return
+        self.hardware = HardwareInterface()
+        self.hardware.set_pir_callback(self._on_motion)
 
-    cap = cv2.VideoCapture(0)
+        self.camera = None
+        self.detector = None
+        self.current_frame = None
 
-    if not cap.isOpened():
-        print("Camera failed to open")
-        return
+    def set_push_callback(self, callback):
+        self.push_callback = callback
 
-    running = True
-    print("Camera started successfully")
+    def request_event(self):
+        self.event_requested = True
 
-    while running:
-        ret, frame = cap.read()
-        if not ret:
-            continue
+    def unlock(self):
+        log("API Command Received: UNLOCK DOOR")
+        self.hardware.unlock_door()
 
-        person_detected, annotated = detect_person(frame)
+    def lock(self):
+        log("API Command Received: LOCK DOOR")
+        self.hardware.lock_door()
 
-        # Save frame for UI live feed
-        with lock:
-            global latest_frame
-            latest_frame = annotated.copy()
+    def mock_motion(self):
+        """API hook to simulate motion"""
+        self.hardware.mock_pir_trigger()
 
-        handle_recording(annotated, person_detected)
+    def _on_motion(self):
+        if self.idle:
+            log("System Waking up from Motion...")
+            self.idle = False
+            self.push_sent_for_event = False
 
-        time.sleep(1 / FPS)
+    def start(self):
+        if self.running:
+            return
 
+        self.running = True
+        self.camera = LiveCameraBuffer(buffer_seconds=15, fps=10)
+        self.detector = HumanDetector()
 
-def stop_system():
-    global running, cap, video_writer, recording
+        threading.Thread(target=self._run, daemon=True).start()
+        log("System started (Idle mode). Waiting for motion.")
 
-    running = False
+    def stop(self):
+        self.running = False
+        self.idle = True
+        if self.camera:
+            self.camera.release()
+        if self.show_window:
+            cv2.destroyAllWindows()
+        self.hardware.cleanup()
+        log("System stopped")
 
-    if video_writer:
-        video_writer.release()
-        video_writer = None
+    def _run(self):
+        last_active_time = time.time()
+        try:
+            while self.running:
+                if self.idle:
+                    time.sleep(0.1)
+                    continue
+                    
+                frame = self.camera.read_frame()
+                if frame is None:
+                    continue
 
-    if cap:
-        cap.release()
-        cap = None
+                annotated, label, suspicious = self.detector.analyze_frame(frame)
+                self.current_frame = annotated
+                
+                # If we see anything, stay awake. Otherwise, go back to sleep after 30s.
+                if label:
+                    last_active_time = time.time()
+                    if suspicious and not self.push_sent_for_event and self.push_callback:
+                        self.push_callback(f"ALERT: {label} Detected!")
+                        self.push_sent_for_event = True
+                elif time.time() - last_active_time > 30:
+                    log("No activity for 30s. Returning to Idle state.")
+                    self.idle = True
+                    self.current_frame = None
 
-    recording = False
-    print("System stopped")
+                if label:
+                    color = (0, 0, 255) if label.startswith("SUSPICIOUS") else (0, 255, 0)
+                    cv2.putText(
+                        annotated,
+                        label,
+                        (50, 50),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        1,
+                        color,
+                        3
+                    )
 
+                if suspicious:
+                    self.request_event()
 
-def handle_recording(frame, person_detected):
-    global recording, video_writer, last_person_time
+                if self.event_requested:
+                    self.event_requested = False
+                    pre_frames = self.camera.get_buffer_frames()
+                    video = record_event(
+                        pre_frames,
+                        self.camera.cap,
+                        duration=10,
+                        fps=10
+                    )
+                    log(f"Saved video: {video}")
 
-    current_time = time.time()
+                time.sleep(0.03)
 
-    # Person detected
-    if person_detected:
-        last_person_time = current_time
+        except Exception as e:
+            log(f"System error: {e}")
 
-        if not recording:
-            start_new_recording(frame)
-
-    # If currently recording
-    if recording:
-        if person_detected:
-            video_writer.write(frame)
-        else:
-            if current_time - last_person_time <= STOP_DELAY:
-                video_writer.write(frame)
-            else:
-                stop_recording()
-
-
-def start_new_recording(frame):
-    global video_writer, recording
-
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    filename = f"{VIDEO_FOLDER}/visit_{timestamp}.mp4"
-
-    height, width, _ = frame.shape
-
-    video_writer = cv2.VideoWriter(
-        filename,
-        cv2.VideoWriter_fourcc(*"mp4v"),
-        FPS,
-        (width, height)
-    )
-
-    recording = True
-    print(f"Started recording: {filename}")
-
-
-def stop_recording():
-    global video_writer, recording
-
-    if video_writer:
-        video_writer.release()
-        video_writer = None
-
-    recording = False
-    print("Recording stopped")
-
-
-def get_latest_frame():
-    with lock:
-        return latest_frame
+    def get_frame(self):
+        return self.current_frame

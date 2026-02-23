@@ -10,3 +10,8 @@ storage/
 # OS
 .DS_Store
 Thumbs.db
+
+# Secrets
+*.pem
+vapid_pub.txt
+vapid_pub_ascii.txt

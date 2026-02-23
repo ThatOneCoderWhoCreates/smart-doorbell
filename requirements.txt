@@ -1,2 +1,14 @@
 opencv-python
 pyyaml
+ultralytics
+torch
+pillow
+flask
+flask-cors
+aiortc
+sounddevice
+numpy
+fastapi
+uvicorn
+
+

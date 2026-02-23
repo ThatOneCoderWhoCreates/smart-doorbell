@@ -1,20 +1,8 @@
-import logging
-import yaml
+from datetime import datetime
 import os
 
-with open("config.yaml") as f:
-    config = yaml.safe_load(f)
+def log(message):
+    os.makedirs("logs", exist_ok=True)
 
-log_file = config["logging"]["file"]
-
-# Ensure log directory exists
-os.makedirs(os.path.dirname(log_file), exist_ok=True)
-
-logging.basicConfig(
-    filename=log_file,
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(message)s"
-)
-
-def log(msg):
-    logging.info(msg)
+    with open("logs/system.log", "a") as f:
+        f.write(f"{datetime.now()} - {message}\n")
