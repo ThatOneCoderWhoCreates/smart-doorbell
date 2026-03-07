@@ -14,9 +14,51 @@ app = FastAPI()
 # Mount static files
 app.mount("/static", StaticFiles(directory="web/static"), name="static")
 
-# Mount storage directory to serve videos
-os.makedirs("storage/local", exist_ok=True)
-app.mount("/storage", StaticFiles(directory="storage/local"), name="storage")
+import aiofiles
+
+# We will handle /storage/ manually to support iOS Range Requests, so comment out the StaticFiles mount
+# app.mount("/storage", StaticFiles(directory="storage/local"), name="storage")
+
+@app.get("/storage/{video_path:path}")
+async def stream_video(video_path: str, request: Request):
+    file_path = os.path.join("storage/local", video_path)
+    if not os.path.exists(file_path):
+        return HTMLResponse(status_code=404)
+
+    file_size = os.path.getsize(file_path)
+    range_header = request.headers.get("Range", 0)
+
+    if range_header:
+        byte1, byte2 = range_header.replace("bytes=", "").split("-")
+        start = int(byte1)
+        end = int(byte2) if byte2 else file_size - 1
+    else:
+        start = 0
+        end = file_size - 1
+
+    chunk_size = (end - start) + 1
+
+    async def file_iterator(file_path, start, chunk_size):
+        async with aiofiles.open(file_path, "rb") as video:
+            await video.seek(start)
+            chunk = await video.read(chunk_size)
+            yield chunk
+
+    headers = {
+        "Content-Range": f"bytes {start}-{end}/{file_size}",
+        "Accept-Ranges": "bytes",
+        "Content-Length": str(chunk_size),
+        "Content-Type": "video/mp4",
+    }
+    
+    return StreamingResponse(
+        file_iterator(file_path, start, chunk_size),
+        headers=headers,
+        status_code=206 if range_header else 200
+    )
+
+# -------------------------
+# PUSH NOTIFICATION SENDER
 
 # Templates
 templates = Jinja2Templates(directory="web/templates")
@@ -44,17 +86,27 @@ pcs = set()
 
 @app.on_event("startup")
 async def startup_event():
-    print("Starting Doorbell System...")
-    system.start()
+    print("Starting Doorbell System... (Waiting for manual start)")
 
+
+is_shutting_down = False
 
 @app.on_event("shutdown")
 async def shutdown_event():
+    global is_shutting_down
+    is_shutting_down = True
     print("Stopping Doorbell System...")
     system.stop()
     for pc in pcs:
         await pc.close()
     pcs.clear()
+    
+    # Force close any lingering WebSockets so Uvicorn can terminate instantly
+    for ws in list(active_audio_sockets):
+        try:
+            await ws.close()
+        except:
+            pass
 
 
 # -------------------------
@@ -64,6 +116,10 @@ async def shutdown_event():
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
+
+@app.get("/recordings_page", response_class=HTMLResponse)
+async def recordings_page(request: Request):
+    return templates.TemplateResponse("recordings.html", {"request": request})
 
 
 # -------------------------
@@ -84,6 +140,8 @@ async def get_status():
 @app.get("/stop")
 async def stop():
     system.stop()
+    global current_alert
+    current_alert = {"id": 0, "message": None}
     return JSONResponse({"status": "stopped"})
 
 
@@ -107,7 +165,8 @@ async def lock():
 @app.post("/api/pir-trigger")
 async def trigger_pir():
     system.mock_motion()
-    return JSONResponse({"status": "motion_simulated"})
+    system.request_event() # Force a recording event
+    return JSONResponse({"status": "motion_simulated_and_recording_started"})
 
 
 @app.post("/api/subscribe")
@@ -120,12 +179,57 @@ async def subscribe(request: Request):
 
 
 @app.get("/api/recordings")
-async def get_recordings():
+async def get_recordings(sort: str = "newest", filter_date: str = None):
     try:
-        files = os.listdir("storage/local")
-        videos = [f for f in files if f.endswith(".avi")]
-        videos.sort(reverse=True) # newest first
-        return JSONResponse({"recordings": videos})
+        base_dir = "storage/local"
+        videos = []
+        
+        for root, _, files in os.walk(base_dir):
+            for file in files:
+                if file.endswith((".mp4", ".webm", ".avi")):
+                    filepath = os.path.join(root, file)
+                    
+                    # Ignore corrupted or empty video files
+                    if os.path.getsize(filepath) == 0:
+                        continue
+                        
+                    rel_path = os.path.relpath(filepath, base_dir).replace("\\", "/")
+                    
+                    if filter_date:
+                        date_parts = filter_date.split("-")
+                        if len(date_parts) == 3:
+                            y, m, d = date_parts
+                            if f"{y}/{m}/{d}" not in rel_path:
+                                continue
+                                
+                    videos.append({
+                        "path": rel_path,
+                        "time": os.path.getmtime(filepath)
+                    })
+                    
+        # Sort based on timestamp to fix "Oldest/Newest" bug
+        if sort == "oldest":
+            videos.sort(key=lambda x: x["time"], reverse=False)
+        else: # newest
+            videos.sort(key=lambda x: x["time"], reverse=True)
+            
+        return JSONResponse({"recordings": [v["path"] for v in videos]})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.delete("/api/recordings/{video_path:path}")
+async def delete_recording(video_path: str):
+    try:
+        # Prevent directory traversal
+        if ".." in video_path:
+            return JSONResponse({"error": "Invalid path"}, status_code=400)
+            
+        file_path = os.path.join("storage/local", video_path)
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            return JSONResponse({"status": "deleted"})
+        else:
+            return JSONResponse({"error": "File not found"}, status_code=404)
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
@@ -136,8 +240,18 @@ async def get_recordings():
 
 from pywebpush import webpush, WebPushException
 import json
+import time
+
+current_alert = {"id": 0, "message": None}
+
+@app.get("/api/latest_alert")
+async def get_latest_alert():
+    return JSONResponse(current_alert)
 
 def send_push_notification(message_text: str):
+    global current_alert
+    current_alert["id"] = time.time()
+    current_alert["message"] = message_text
     print(f"Sending Push Notification to {len(subscriptions)} devices: {message_text}")
     for sub in subscriptions.copy():
         try:
@@ -176,7 +290,7 @@ async def generate_frames():
 
     idle_bytes = get_idle_frame()
 
-    while True:
+    while not is_shutting_down:
         frame = system.get_frame()
         if frame is not None:
             _, buffer = cv2.imencode(".jpg", frame)
@@ -205,47 +319,26 @@ async def video_feed():
 # WEBSOCKET AUDIO CHANNEL
 # -------------------------
 from fastapi import WebSocket, WebSocketDisconnect
-from utils.audio import AudioHandler
+
+active_audio_sockets = set()
 
 @app.websocket("/ws/audio")
 async def websocket_audio_endpoint(websocket: WebSocket):
     await websocket.accept()
-    audio = AudioHandler(rate=16000, chunk=1024)
-    audio.start_input_stream()
-    audio.start_output_stream()
-    
-    # Task to read from WebSocket (phone mic) and play on PC speaker
-    async def receive_from_phone():
-        try:
-            while True:
-                data = await websocket.receive_bytes()
-                await asyncio.to_thread(audio.write_audio, data)
-        except WebSocketDisconnect:
-            pass
-        except Exception as e:
-            print(f"Error receiving audio from phone: {e}")
-
-    # Task to read from PC mic and send to WebSocket (phone speaker)
-    async def send_to_phone():
-        try:
-            while True:
-                data = await asyncio.to_thread(audio.read_audio)
-                if data:
-                    await websocket.send_bytes(data)
-                else:
-                    await asyncio.sleep(0.01)
-        except WebSocketDisconnect:
-            pass
-        except Exception as e:
-            print(f"Error sending audio to phone: {e}")
-
+    active_audio_sockets.add(websocket)
     try:
-        # Run both tasks concurrently
-        await asyncio.gather(
-            receive_from_phone(),
-            send_to_phone()
-        )
+        while True:
+            # Receive audio packet from one connected client
+            data = await websocket.receive_bytes()
+            
+            # Broadcast the packet to all OUTBOUND clients (e.g., Phone -> PC, PC -> Phone)
+            for client in list(active_audio_sockets):
+                if client != websocket:
+                    try:
+                        await client.send_bytes(data)
+                    except Exception as e:
+                        active_audio_sockets.discard(client)
     except WebSocketDisconnect:
-        print("Audio WebSocket disconnected.")
+        active_audio_sockets.discard(websocket)
     finally:
-        audio.close()
+        pass

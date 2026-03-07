@@ -18,6 +18,14 @@ async function updateStatus() {
 }
 
 async function startSystem() {
+    // Initialize Web Audio API on first user interaction so we can actually hear the phone!
+    if (!audioContext) {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+    }
+    if (audioContext.state === 'suspended') {
+        await audioContext.resume();
+    }
+
     const response = await fetch("/start");
     const data = await response.json();
     alert("System: " + data.status);
@@ -89,23 +97,98 @@ async function simulatePIR() {
 
 async function fetchRecordings() {
     try {
-        const res = await fetch("/api/recordings");
+        const sortOrder = document.getElementById("sortOrder") ? document.getElementById("sortOrder").value : "newest";
+        const filterDate = document.getElementById("filterDate") ? document.getElementById("filterDate").value : "";
+
+        // Build url with query params
+        let url = `/api/recordings?sort=${sortOrder}`;
+        if (filterDate) {
+            url += `&filter_date=${filterDate}`;
+        }
+
+        const res = await fetch(url);
         const data = await res.json();
         const list = document.getElementById("recordingList");
 
         if (data.recordings && data.recordings.length > 0) {
             list.innerHTML = "";
-            data.recordings.forEach(vid => {
+
+            // Limit to 3 items if on the main dashboard, show all if on recordings page
+            let displayList = data.recordings;
+            if (!window.isRecordingsPage) {
+                displayList = displayList.slice(0, 3);
+            }
+
+            displayList.forEach(vid => {
                 const li = document.createElement("li");
-                li.style.marginBottom = "10px";
-                li.innerHTML = `<a href="/storage/${vid}" target="_blank" style="text-decoration: none; color: #007bff;">📹 ${vid}</a>`;
+
+                li.innerHTML = `
+                    <span class="recording-date">📅 ${vid}</span>
+                    <div style="display: flex; gap: 8px;">
+                        <button onclick="playVideo('/storage/${vid}')" style="background: rgba(16, 185, 129, 0.5); padding: 8px 12px; margin: 0; width: auto; font-size: 0.9em; border-radius: 8px; border: 1px solid rgba(16,185,129,0.8);">▶ Play</button>
+                        <button onclick="deleteVideo('${vid}')" style="background: rgba(239, 68, 68, 0.5); padding: 8px 12px; margin: 0; width: auto; font-size: 0.9em; border-radius: 8px; border: 1px solid rgba(239,68,68,0.8);">🗑️</button>
+                    </div>
+                `;
                 list.appendChild(li);
             });
+
+            if (!window.isRecordingsPage && data.recordings.length > 3) {
+                const li = document.createElement("li");
+                li.style.justifyContent = "center";
+                li.style.background = "transparent";
+                li.style.border = "none";
+                li.innerHTML = `<span style="color: rgba(255,255,255,0.5); font-size: 0.9rem;">+ ${data.recordings.length - 3} older recordings...</span>`;
+                list.appendChild(li);
+            }
+
         } else {
-            list.innerHTML = "<li>No recordings found.</li>";
+            list.innerHTML = "<li style='justify-content: center; color: rgba(255,255,255,0.6);'>No recordings found.</li>";
         }
     } catch (err) {
         console.error("Failed to fetch recordings", err);
+    }
+}
+
+function playVideo(url) {
+    const modal = document.getElementById("videoModal");
+    const video = document.getElementById("playbackVideo");
+
+    if (modal && video) {
+        video.src = url;
+        modal.style.display = "flex"; // Changed from block to flex for absolute centering
+        video.play();
+    } else {
+        // Fallback if modal is missing
+        window.open(url, '_blank');
+    }
+}
+
+function closeVideo() {
+    const modal = document.getElementById("videoModal");
+    const video = document.getElementById("playbackVideo");
+
+    if (modal && video) {
+        video.pause();
+        video.src = "";
+        modal.style.display = "none";
+    }
+}
+
+async function deleteVideo(path) {
+    if (!confirm("Are you sure you want to permanently delete this video?")) return;
+
+    try {
+        const response = await fetch('/api/recordings/' + path, { method: 'DELETE' });
+        const data = await response.json();
+
+        if (response.ok && data.status === "deleted") {
+            fetchRecordings(); // Refresh list immediately
+        } else {
+            alert("Failed to delete video: " + (data.error || "Unknown error"));
+        }
+    } catch (err) {
+        console.error("Error deleting video", err);
+        alert("An error occurred while deleting the video.");
     }
 }
 
@@ -258,8 +341,13 @@ async function startAudio() {
                 audioWS.send(int16Data.buffer);
             };
 
+            // Fix Local Echo by routing through a muted GainNode
+            const gainNode = audioContext.createGain();
+            gainNode.gain.value = 0; // Mute the local playback of the microphone entirely
+
             source.connect(processor);
-            processor.connect(audioContext.destination);
+            processor.connect(gainNode);
+            gainNode.connect(audioContext.destination);
         }
     } catch (err) {
         console.error("Microphone access denied or error:", err);
@@ -271,7 +359,40 @@ function stopAudio() {
     isRecording = false;
     document.getElementById("micButton").style.backgroundColor = "#3498db";
     document.getElementById("audioStatus").innerText = "Intercom Connected (Press & Hold to Talk)";
+
+    // Completely stop microphone tracks to stop recording
+    if (mediaStream) {
+        mediaStream.getTracks().forEach(track => track.stop());
+        mediaStream = null;
+    }
+    if (processor) {
+        processor.disconnect();
+        processor = null;
+    }
 }
+
+// Global UI Alert Polling
+let lastAlertId = null; // Use null to detect first fetch
+setInterval(async () => {
+    try {
+        const res = await fetch("/api/latest_alert");
+        const data = await res.json();
+
+        // If this is our very first time asking the server, just silently learn the current ID
+        if (lastAlertId === null) {
+            lastAlertId = data.id;
+            return;
+        }
+
+        // Only trigger an alert if the ID has mathematically INCREASED since we last checked
+        if (data && data.id > lastAlertId) {
+            lastAlertId = data.id;
+            if (data.message) {
+                alert("🚨 SYSTEM ALERT 🚨\n\n" + data.message);
+            }
+        }
+    } catch (e) { }
+}, 2000);
 
 // Initialize on load
 initAudioIntercom();

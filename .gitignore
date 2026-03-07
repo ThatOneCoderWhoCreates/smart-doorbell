@@ -15,3 +15,8 @@ Thumbs.db
 *.pem
 vapid_pub.txt
 vapid_pub_ascii.txt
+
+
+cloudflare*.log
+cloudflared.exe
+*.log

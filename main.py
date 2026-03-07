@@ -65,21 +65,24 @@ class DoorbellSystem:
         self.idle = True
         if self.camera:
             self.camera.release()
+            self.camera = None
         if self.show_window:
             cv2.destroyAllWindows()
         self.hardware.cleanup()
+        self.current_frame = None
         log("System stopped")
 
     def _run(self):
         last_active_time = time.time()
         try:
             while self.running:
-                if self.idle:
-                    time.sleep(0.1)
-                    continue
-                    
                 frame = self.camera.read_frame()
                 if frame is None:
+                    continue
+
+                if self.idle:
+                    self.current_frame = frame
+                    time.sleep(0.03)
                     continue
 
                 annotated, label, suspicious = self.detector.analyze_frame(frame)
@@ -94,7 +97,7 @@ class DoorbellSystem:
                 elif time.time() - last_active_time > 30:
                     log("No activity for 30s. Returning to Idle state.")
                     self.idle = True
-                    self.current_frame = None
+                    # Don't set current_frame to None so live feed persists
 
                 if label:
                     color = (0, 0, 255) if label.startswith("SUSPICIOUS") else (0, 255, 0)
@@ -108,8 +111,8 @@ class DoorbellSystem:
                         3
                     )
 
-                if suspicious:
-                    self.request_event()
+                # Recording is now strictly Manual / Motion Triggered.
+                # AI threats only send push notifications / alerts, they DO NOT auto-record anymore.
 
                 if self.event_requested:
                     self.event_requested = False

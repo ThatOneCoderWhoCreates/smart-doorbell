@@ -60,14 +60,19 @@ class HumanDetector:
             duration = current_time - self.first_detected_time
 
             # ----------------------------
-            # LOITERING LOGIC (UNCHANGED)
+            # RECORD ANY PERSON
+            # trigger an event for ANY person detected
             # ----------------------------
-            if duration > 10 and not self.suspicious_triggered:
-                suspicious = True
-                label = f"SUSPICIOUS {class_name.upper()}"
-                self.suspicious_triggered = True
+            if class_name.lower() == "person":
+                suspicious = True # This will trigger record_event in main.py
+                label = f"PERSON DETECTED"
             else:
                 label = f"REGULAR {class_name.upper()}"
+                
+            # Keep loitering label logic
+            if duration > 10 and class_name.lower() == "person" and not self.suspicious_triggered:
+                label = f"SUSPICIOUS LOITERING"
+                self.suspicious_triggered = True
 
             # ----------------------------
             # MASK / HELMET EDGE CASE
