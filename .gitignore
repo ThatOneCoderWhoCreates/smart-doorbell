@@ -20,3 +20,4 @@ vapid_pub_ascii.txt
 cloudflare*.log
 cloudflared.exe
 *.log
+cf_out.txt

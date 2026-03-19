@@ -17,6 +17,7 @@ class DoorbellSystem:
         
         self.push_callback = None
         self.push_sent_for_event = False
+        self.push_sent_time = 0  # Timestamp of last push sent
 
         self.hardware = HardwareInterface()
         self.hardware.set_pir_callback(self._on_motion)
@@ -91,9 +92,14 @@ class DoorbellSystem:
                 # If we see anything, stay awake. Otherwise, go back to sleep after 30s.
                 if label:
                     last_active_time = time.time()
+                    # Reset push cooldown after 60 seconds so repeated detections re-trigger
+                    if self.push_sent_for_event and (time.time() - self.push_sent_time > 60):
+                        self.push_sent_for_event = False
+                    
                     if suspicious and not self.push_sent_for_event and self.push_callback:
-                        self.push_callback(f"ALERT: {label} Detected!")
+                        self.push_callback(f"🚨 {label}")
                         self.push_sent_for_event = True
+                        self.push_sent_time = time.time()
                 elif time.time() - last_active_time > 30:
                     log("No activity for 30s. Returning to Idle state.")
                     self.idle = True

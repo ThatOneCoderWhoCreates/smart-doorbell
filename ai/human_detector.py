@@ -47,7 +47,7 @@ class HumanDetector:
                     break
 
         # ----------------------------
-        # MAIN OBJECT LOGIC (UNCHANGED)
+        # MAIN OBJECT LOGIC 
         # ----------------------------
         if best_box is not None and not suspicious:
             class_id = int(best_box.cls[0])

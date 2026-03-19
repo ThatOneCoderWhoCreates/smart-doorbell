@@ -142,6 +142,7 @@ async def stop():
     system.stop()
     global current_alert
     current_alert = {"id": 0, "message": None}
+    alert_queue.clear()
     return JSONResponse({"status": "stopped"})
 
 
@@ -242,17 +243,40 @@ from pywebpush import webpush, WebPushException
 import json
 import time
 
+# Alert queue - stores recent alerts for polling
+alert_queue = []
+ALERT_MAX_AGE = 300  # Keep alerts for 5 minutes
+
+# Legacy single alert (kept for backward compat)
 current_alert = {"id": 0, "message": None}
 
 @app.get("/api/latest_alert")
 async def get_latest_alert():
     return JSONResponse(current_alert)
 
+@app.get("/api/alerts")
+async def get_alerts(since: float = 0):
+    """Returns all alerts newer than the given timestamp."""
+    now = time.time()
+    # Clean old alerts
+    active = [a for a in alert_queue if now - a["time"] < ALERT_MAX_AGE]
+    alert_queue.clear()
+    alert_queue.extend(active)
+    # Return alerts newer than 'since'
+    new_alerts = [a for a in alert_queue if a["time"] > since]
+    return JSONResponse({"alerts": new_alerts})
+
 def send_push_notification(message_text: str):
     global current_alert
-    current_alert["id"] = time.time()
+    now = time.time()
+    current_alert["id"] = now
     current_alert["message"] = message_text
-    print(f"Sending Push Notification to {len(subscriptions)} devices: {message_text}")
+    
+    # Add to alert queue
+    alert_queue.append({"time": now, "message": message_text})
+    
+    print(f"ALERT FIRED: {message_text}")
+    print(f"Sending Push Notification to {len(subscriptions)} devices...")
     for sub in subscriptions.copy():
         try:
             webpush(

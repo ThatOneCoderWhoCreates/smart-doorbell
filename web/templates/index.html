@@ -3,124 +3,234 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Smart AI Doorbell</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Smart Doorbell</title>
     <link rel="stylesheet" href="/static/style.css">
-
-    <!-- PWA Requirements -->
     <link rel="manifest" href="/static/manifest.json">
-    <meta name="theme-color" content="#121826">
+    <meta name="theme-color" content="#0a0a0e">
     <link rel="apple-touch-icon" href="/static/favicon.ico">
 </head>
 
 <body>
 
-    <div class="dashboard container">
+    <!-- ==================== MOBILE LAYOUT ==================== -->
+    <div id="mobileApp">
 
-        <header class="glass-panel" style="backdrop-filter: blur(25px);">
-            <div style="display: flex; align-items: center; gap: 15px;">
-                <h1 style="margin: 0; font-size: 1.8rem; font-weight: 700;">Smart Doorbell</h1>
-            </div>
-            <div id="systemStatus" class="status offline">Offline</div>
-        </header>
-
-        <div class="main-content">
-
-            <!-- LEFT COLUMN: CAMERA & CORE -->
-            <div class="video-card glass-panel" style="padding: 15px;">
-                <img src="/video_feed" class="video-feed" alt="Camera Feed Offline">
-
-                <div class="info-panel desktop-info">
-                    <p><strong>Threat Level:</strong> <span id="threatLevel">Normal</span></p>
-                    <p><strong>Last Event:</strong> <span id="lastEvent">None</span></p>
+        <!-- SCREEN: HOME (Hero) -->
+        <div id="screen-home" class="screen active">
+            <div class="hero-container">
+                <div class="hero-header">
+                    <div>
+                        <p class="hero-greeting">Welcome back 👋</p>
+                        <h1 class="hero-title">Smart Doorbell</h1>
+                    </div>
+                    <div id="mobileStatus" class="status-pill offline">Offline</div>
                 </div>
 
-                <div
-                    style="display: flex; gap: 15px; margin-top: 20px; flex-wrap: wrap; justify-content: center; align-items: center; background: rgba(0, 0, 0, 0.2); padding: 20px; border-radius: 16px;">
-                    <div style="text-align: center; flex: 1; min-width: 200px;">
-                        <button id="micButton" class="mic-btn" style="margin: 0; width: 100%; border-radius: 50px;"
-                            onmousedown="startAudio()" onmouseup="stopAudio()" ontouchstart="startAudio()"
-                            ontouchend="stopAudio()">🎙️ Hold to Talk</button>
-                        <p id="audioStatus"
-                            style="font-size: 0.85em; color: rgba(255,255,255,0.7); margin-top: 8px; margin-bottom: 0;">
-                            Connecting...</p>
+                <div class="hero-status-card">
+                    <div class="status-item">
+                        <span class="status-icon">🛡️</span>
+                        <div>
+                            <p class="status-label">Threat Level</p>
+                            <p class="status-value" id="heroThreatLevel">Normal</p>
+                        </div>
                     </div>
-                    <div style="flex: 1; min-width: 200px;">
-                        <button onclick="simulatePIR()" class="btn-warning"
-                            style="width: 100%; font-size: 1.1rem; margin: 0; font-weight: 700; border-radius: 50px;">🚶‍♂️
-                            Simulate Motion</button>
+                    <div class="status-divider"></div>
+                    <div class="status-item">
+                        <span class="status-icon">📋</span>
+                        <div>
+                            <p class="status-label">Last Event</p>
+                            <p class="status-value" id="heroLastEvent">None</p>
+                        </div>
                     </div>
                 </div>
-            </div>
 
-            <!-- RIGHT COLUMN: CONTROLS & RECENT -->
-            <div style="display: flex; flex-direction: column; gap: 25px;">
+                <h2 class="section-title">Quick Actions</h2>
+                <div class="action-grid">
+                    <div class="action-card" onclick="navigateTo('camera')">
+                        <div class="action-icon" style="background: rgba(16, 185, 129, 0.1);">
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+                        </div>
+                        <span class="action-label">Live Camera</span>
+                        <span class="action-desc">View live feed</span>
+                    </div>
+                    <div class="action-card" onclick="navigateTo('recordings')">
+                        <div class="action-icon" style="background: rgba(139, 92, 246, 0.1);">
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                        </div>
+                        <span class="action-label">History</span>
+                        <span class="action-desc">View recordings</span>
+                    </div>
+                    <div class="action-card" onclick="simulatePIR()">
+                        <div class="action-icon" style="background: rgba(245, 158, 11, 0.1);">
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13.73 21a2 2 0 0 1-3.46 0"></path><path d="M18.63 13A17.89 17.89 0 0 1 18 8"></path><path d="M6.26 6.26A5.86 5.86 0 0 0 6 8c0 7-3 9-3 9h14"></path><path d="M18 8a6 6 0 0 0-9.33-5"></path></svg>
+                        </div>
+                        <span class="action-label">Simulate</span>
+                        <span class="action-desc">Test motion</span>
+                    </div>
+                    <div class="action-card" onclick="toggleSystem()">
+                        <div class="action-icon" id="powerIcon" style="background: rgba(59, 130, 246, 0.1);">
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
+                        </div>
+                        <span class="action-label" id="powerLabel">Start System</span>
+                        <span class="action-desc" id="powerDesc">Power on</span>
+                    </div>
+                </div>
 
-                <!-- Access Control -->
-                <div class="control-card glass-panel">
-                    <h2 style="margin-top: 0; margin-bottom: 5px;">Access Control</h2>
-                    <p style="margin-top: 0; color: rgba(255,255,255,0.7); font-size: 0.9rem;">Manage smart lock</p>
-
+                <h2 class="section-title">Access Control</h2>
+                <div class="lock-card">
                     <div class="lock-visual-container">
                         <div id="visualLock" class="lock-icon locked">🔒</div>
                     </div>
-
-                    <div style="display: flex; gap: 12px; margin-top: 20px;">
-                        <button class="control-btn" onclick="lockDoor()"
-                            style="flex: 1; background: rgba(239, 68, 68, 0.2); border-color: rgba(239,68,68,0.5);">🔒
-                            Lock</button>
-                        <button class="control-btn" onclick="unlockDoor()"
-                            style="flex: 1; background: rgba(16, 185, 129, 0.2); border-color: rgba(16,185,129,0.5);">🔓
-                            Unlock</button>
+                    <div style="display: flex; gap: 12px; margin-top: 16px;">
+                        <button class="control-btn lock-btn" onclick="lockDoor()">🔒 Lock</button>
+                        <button class="control-btn unlock-btn" onclick="unlockDoor()">🔓 Unlock</button>
                     </div>
                 </div>
-
-                <!-- System Power -->
-                <div class="control-card glass-panel">
-                    <h2 style="margin-top: 0; margin-bottom: 15px;">System Power</h2>
-                    <div style="display: flex; gap: 12px;">
-                        <button onclick="startSystem()"
-                            style="background: rgba(37, 99, 235, 0.3); border-color: rgba(37, 99, 235, 0.6); flex: 1;">Start
-                            System</button>
-                        <button onclick="stopSystem()"
-                            style="background: rgba(239, 68, 68, 0.3); border-color: rgba(239, 68, 68, 0.6); flex: 1;">Stop
-                            System</button>
-                    </div>
-                </div>
-
-                <!-- Recent Recordings Snippet -->
-                <div class="recording-card glass-panel">
-                    <div
-                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                        <h2 style="margin: 0;">Recent</h2>
-                        <button onclick="window.location.href='/recordings_page'"
-                            style="width: auto; margin: 0; padding: 6px 14px; border-radius: 50px; font-size: 0.85rem; background: rgba(255,255,255,0.2);">View
-                            All ➔</button>
-                    </div>
-
-                    <ul id="recordingList" class="recording-list">
-                        <li>Loading...</li>
-                    </ul>
-                </div>
-
             </div>
-
         </div>
 
-        <!-- Video Modal Overlay -->
-        <div id="videoModal"
-            style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); backdrop-filter: blur(10px); z-index: 1000; justify-content: center; align-items: center; flex-direction: column; padding: 20px; box-sizing: border-box;">
-            <div
-                style="max-width: 800px; width: 100%; background: rgba(255,255,255,0.1); padding: 15px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.2);">
-                <video id="playbackVideo" width="100%" controls
-                    style="border-radius: 8px; background: black; max-height: 70vh;">
+        <!-- SCREEN: CAMERA -->
+        <div id="screen-camera" class="screen">
+            <div class="screen-content">
+                <div class="screen-header">
+                    <h1 class="screen-title">Live Camera</h1>
+                    <div id="cameraStatus" class="status-pill offline">Offline</div>
+                </div>
+
+                <div class="camera-container">
+                    <img src="/video_feed" class="video-feed" alt="Camera Feed">
+                    <div class="live-badge">
+                        <span class="live-dot"></span> LIVE
+                    </div>
+                </div>
+
+                <div class="camera-info">
+                    <div class="info-item">
+                        <span class="info-label">Threat</span>
+                        <span class="info-value" id="threatLevel" style="color: #10b981;">Normal</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Last Event</span>
+                        <span class="info-value" id="lastEvent">None</span>
+                    </div>
+                </div>
+
+                <div class="intercom-bar">
+                    <button id="micButton" class="mic-btn"
+                        onmousedown="startAudio()" onmouseup="stopAudio()" ontouchstart="startAudio()" ontouchend="stopAudio()">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="22"></line></svg>
+                        Hold to Talk
+                    </button>
+                    <p id="audioStatus" class="intercom-status">Ready</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- SCREEN: RECORDINGS -->
+        <div id="screen-recordings" class="screen">
+            <div class="screen-content">
+                <div class="screen-header">
+                    <h1 class="screen-title">Recordings</h1>
+                </div>
+
+                <div class="filter-controls">
+                    <div style="flex: 1;">
+                        <label for="sortOrder">Sort By</label>
+                        <select id="sortOrder" onchange="fetchRecordings()">
+                            <option value="newest">Newest First</option>
+                            <option value="oldest">Oldest First</option>
+                        </select>
+                    </div>
+                    <div style="flex: 1;">
+                        <label for="filterDate">Filter Date</label>
+                        <input type="date" id="filterDate" onchange="fetchRecordings()">
+                    </div>
+                    <div>
+                        <button onclick="document.getElementById('filterDate').value=''; fetchRecordings()" class="filter-clear-btn">Clear</button>
+                    </div>
+                </div>
+
+                <ul id="recordingList" class="recording-list">
+                    <li style="justify-content: center; color: var(--text-muted);">Loading...</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- BOTTOM NAVIGATION -->
+        <nav class="bottom-nav">
+            <button class="nav-item active" onclick="navigateTo('home')" data-screen="home">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+                <span>Home</span>
+            </button>
+            <button class="nav-item" onclick="navigateTo('camera')" data-screen="camera">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+                <span>Camera</span>
+            </button>
+            <button class="nav-item" onclick="navigateTo('recordings')" data-screen="recordings">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                <span>History</span>
+            </button>
+        </nav>
+
+        <!-- VIDEO PLAYBACK MODAL -->
+        <div id="videoModal" class="video-modal">
+            <div class="video-modal-content">
+                <video id="playbackVideo" width="100%" controls style="border-radius: 12px; background: black; max-height: 70vh; outline: none;">
                     Your browser does not support the video tag.
                 </video>
-                <button onclick="closeVideo()" class="control-btn"
-                    style="margin-top: 15px; margin-bottom: 0; background: rgba(239, 68, 68, 0.4);">Close Video</button>
+                <button onclick="closeVideo()" class="modal-close-btn">Close</button>
             </div>
         </div>
+    </div>
 
+    <!-- ==================== DESKTOP LAYOUT ==================== -->
+    <div id="desktopApp">
+        <div class="desktop-container">
+            <div class="desktop-camera-wrapper">
+                <div class="desktop-camera-card">
+                    <div class="desktop-cam-header">
+                        <div>
+                            <h1 class="desktop-title">Smart Doorbell</h1>
+                            <p class="desktop-subtitle">Live Camera Feed</p>
+                        </div>
+                        <div id="systemStatus" class="status-pill offline">Offline</div>
+                    </div>
+                    <div class="desktop-feed-container">
+                        <img src="/video_feed" class="desktop-video-feed" alt="Camera Feed">
+                        <div class="live-badge" style="top:16px;left:16px;">
+                            <span class="live-dot"></span> LIVE
+                        </div>
+                    </div>
+                    <div class="desktop-controls">
+                        <div class="desktop-info-row">
+                            <div class="info-item">
+                                <span class="info-label">Threat</span>
+                                <span class="info-value" id="desktopThreat" style="color:#10b981;">Normal</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="info-label">Last Event</span>
+                                <span class="info-value" id="desktopEvent">None</span>
+                            </div>
+                        </div>
+                        <div class="desktop-btn-row">
+                            <button onclick="startSystem()" class="desktop-btn start-btn">▶ Start</button>
+                            <button onclick="stopSystem()" class="desktop-btn stop-btn">■ Stop</button>
+                            <button onclick="lockDoor()" class="desktop-btn" style="color:#ef4444;">🔒 Lock</button>
+                            <button onclick="unlockDoor()" class="desktop-btn" style="color:#10b981;">🔓 Unlock</button>
+                        </div>
+                        <div class="desktop-intercom">
+                            <button id="desktopMicButton" class="mic-btn desktop-mic"
+                                onmousedown="startAudio()" onmouseup="stopAudio()">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="22"></line></svg>
+                                Hold to Talk
+                            </button>
+                            <p id="desktopAudioStatus" class="intercom-status">Ready</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script src="/static/app.js"></script>
