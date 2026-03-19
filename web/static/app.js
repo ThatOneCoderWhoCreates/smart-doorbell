@@ -2,17 +2,14 @@
 // SPA NAVIGATION
 // =====================
 
+// Mobile navigation
 function navigateTo(screenName) {
-    // Hide all screens
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-    // Show target
     const target = document.getElementById('screen-' + screenName);
     if (target) target.classList.add('active');
-    // Update nav
     document.querySelectorAll('.nav-item').forEach(n => {
         n.classList.toggle('active', n.dataset.screen === screenName);
     });
-    // If navigating to recordings, refresh list
     if (screenName === 'recordings') {
         window.isRecordingsPage = true;
         fetchRecordings();
@@ -21,10 +18,27 @@ function navigateTo(screenName) {
     }
 }
 
-// Handle hash-based navigation (for /recordings_page redirect)
+// Desktop navigation
+function desktopNavigateTo(pageId) {
+    document.querySelectorAll('.dt-page').forEach(p => p.classList.remove('active'));
+    const target = document.getElementById(pageId);
+    if (target) target.classList.add('active');
+    document.querySelectorAll('.sidebar-item').forEach(n => {
+        n.classList.toggle('active', n.dataset.dtscreen === pageId);
+    });
+    if (pageId === 'dt-recordings') {
+        window.isDtRecordingsPage = true;
+        fetchRecordings();
+    } else {
+        window.isDtRecordingsPage = false;
+    }
+}
+
+// Handle hash-based navigation
 window.addEventListener('load', () => {
     if (window.location.hash === '#recordings') {
         navigateTo('recordings');
+        desktopNavigateTo('dt-recordings');
     }
 });
 
@@ -119,10 +133,38 @@ async function simulatePIR() {
 // RECORDINGS
 // =====================
 
+function populateRecordingList(listEl, recordings, showAll) {
+    if (!listEl) return;
+    if (recordings.length > 0) {
+        listEl.innerHTML = "";
+        let displayList = showAll ? recordings : recordings.slice(0, 3);
+        displayList.forEach(vid => {
+            const li = document.createElement("li");
+            li.innerHTML = `
+                <span class="recording-date">📅 ${vid}</span>
+                <div style="display: flex; gap: 6px;">
+                    <button onclick="playVideo('/storage/${vid}')" style="background: rgba(16,185,129,0.15); color: #10b981;">▶ Play</button>
+                    <button onclick="deleteVideo('${vid}')" style="background: rgba(239,68,68,0.15); color: #ef4444;">🗑️</button>
+                </div>
+            `;
+            listEl.appendChild(li);
+        });
+        if (!showAll && recordings.length > 3) {
+            const li = document.createElement("li");
+            li.style.cssText = "justify-content:center;background:transparent;border:none;";
+            li.innerHTML = `<span style="color:var(--text-muted);font-size:0.85rem;">+ ${recordings.length - 3} more</span>`;
+            listEl.appendChild(li);
+        }
+    } else {
+        listEl.innerHTML = "<li style='justify-content:center;color:var(--text-muted);'>No recordings found.</li>";
+    }
+}
+
 async function fetchRecordings() {
     try {
-        const sortEl = document.getElementById("sortOrder");
-        const filterEl = document.getElementById("filterDate");
+        // Use whichever sort/filter controls exist
+        const sortEl = document.getElementById("sortOrder") || document.getElementById("dtSortOrder");
+        const filterEl = document.getElementById("filterDate") || document.getElementById("dtFilterDate");
         const sortOrder = sortEl ? sortEl.value : "newest";
         const filterDate = filterEl ? filterEl.value : "";
 
@@ -131,41 +173,27 @@ async function fetchRecordings() {
 
         const res = await fetch(url);
         const data = await res.json();
-        const list = document.getElementById("recordingList");
-        if (!list) return;
+        const recordings = data.recordings || [];
 
-        if (data.recordings && data.recordings.length > 0) {
-            list.innerHTML = "";
-            let displayList = data.recordings;
-            if (!window.isRecordingsPage) displayList = displayList.slice(0, 3);
-
-            displayList.forEach(vid => {
-                const li = document.createElement("li");
-                li.innerHTML = `
-                    <span class="recording-date">📅 ${vid}</span>
-                    <div style="display: flex; gap: 6px;">
-                        <button onclick="playVideo('/storage/${vid}')" style="background: rgba(16,185,129,0.15); color: #10b981;">▶ Play</button>
-                        <button onclick="deleteVideo('${vid}')" style="background: rgba(239,68,68,0.15); color: #ef4444;">🗑️</button>
-                    </div>
-                `;
-                list.appendChild(li);
-            });
-
-            if (!window.isRecordingsPage && data.recordings.length > 3) {
-                const li = document.createElement("li");
-                li.style.cssText = "justify-content:center;background:transparent;border:none;";
-                li.innerHTML = `<span style="color:var(--text-muted);font-size:0.85rem;">+ ${data.recordings.length - 3} more</span>`;
-                list.appendChild(li);
-            }
-        } else {
-            list.innerHTML = "<li style='justify-content:center;color:var(--text-muted);'>No recordings found.</li>";
-        }
+        // Mobile list
+        populateRecordingList(
+            document.getElementById("recordingList"),
+            recordings,
+            window.isRecordingsPage
+        );
+        // Desktop list
+        populateRecordingList(
+            document.getElementById("dtRecordingList"),
+            recordings,
+            window.isDtRecordingsPage
+        );
     } catch (err) { console.error("Failed to fetch recordings", err); }
 }
 
 function playVideo(url) {
-    const modal = document.getElementById("videoModal");
-    const video = document.getElementById("playbackVideo");
+    // Try mobile modal first, then desktop
+    const modal = document.getElementById("videoModal") || document.getElementById("dtVideoModal");
+    const video = document.getElementById("playbackVideo") || document.getElementById("dtPlaybackVideo");
     if (modal && video) {
         video.src = url;
         modal.style.display = "flex";
@@ -176,13 +204,14 @@ function playVideo(url) {
 }
 
 function closeVideo() {
-    const modal = document.getElementById("videoModal");
-    const video = document.getElementById("playbackVideo");
-    if (modal && video) {
-        video.pause();
-        video.src = "";
-        modal.style.display = "none";
-    }
+    ['videoModal', 'dtVideoModal'].forEach(id => {
+        const modal = document.getElementById(id);
+        if (modal) modal.style.display = "none";
+    });
+    ['playbackVideo', 'dtPlaybackVideo'].forEach(id => {
+        const video = document.getElementById(id);
+        if (video) { video.pause(); video.src = ""; }
+    });
 }
 
 async function deleteVideo(path) {
@@ -432,11 +461,11 @@ setInterval(async () => {
 
             // Update threat displays
             const lastMsg = data.alerts[data.alerts.length - 1].message;
-            ['threatLevel', 'heroThreatLevel', 'desktopThreat'].forEach(id => {
+            ['threatLevel', 'heroThreatLevel', 'desktopThreat', 'desktopCamThreat'].forEach(id => {
                 const el = document.getElementById(id);
                 if (el) { el.innerText = lastMsg; el.style.color = '#ef4444'; }
             });
-            ['lastEvent', 'heroLastEvent', 'desktopEvent'].forEach(id => {
+            ['lastEvent', 'heroLastEvent', 'desktopEvent', 'desktopCamEvent'].forEach(id => {
                 const el = document.getElementById(id);
                 if (el) el.innerText = new Date().toLocaleTimeString();
             });
